@@ -3,13 +3,13 @@
 ### Add dependency to project
 
 ```sh
-npm i @iad-os/policy-middleware
+npm i @iad-os/jorah-policy-middleware
 ```
 
 ## Configure
 
 ```typescript
-import policyMiddleware from '@iad-os/policy-middleware';
+import policyMiddleware from '@iad-os/jorah-policy-middleware';
 
 // TDB check git repo
 ```

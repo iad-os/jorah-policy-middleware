@@ -79,7 +79,7 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
         const requiredData = await fetchRequiredData(req, required);
         const opaRequest = toPolicyEvaluationRequest(req, requiredData);
         const policyPath = `${opa.url}${decisionPath(req)}`;
-        const { data } = await doPost(req, policyPath, { input: opaRequest });
+        const { data } = await doPost(req, policyPath, opaRequest);
         const decisionLog = {
           allow: data.result?.allow,
           decision: {

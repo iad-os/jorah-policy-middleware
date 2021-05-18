@@ -1,15 +1,39 @@
-import { RequestHandler, Request, NextFunction } from 'express';
+import { RequestHandler, Request } from 'express';
 import reduce from 'lodash.reduce';
+import '@iad-os/axios-injector';
 import merge from 'lodash.merge';
+
+export type PolicyEvaluation = {
+  request: PolicyEvaluationRequest;
+  decision: PolicyDecision;
+  path?: string;
+};
+
+declare module 'http' {
+  interface IncomingMessage {
+    policyEvaluation: PolicyEvaluation;
+  }
+}
+
+export interface PolicyDecision extends Record<string, unknown> {
+  decision_id: string;
+  result: { allow?: boolean; [key: string]: any };
+}
+
+export type PolicyEvaluationRequest = {
+  input: {
+    req: Partial<Request>;
+  };
+};
 
 export type ToPolicyEvaluationRequest = (
   req: Request,
   required: {
     [key: string]: unknown;
   }
-) => any;
+) => PolicyEvaluationRequest;
 
-export type OnDecisionHandler = (decision: Record<string, unknown>, next: NextFunction) => void;
+export type OnDecisionHandler = RequestHandler;
 
 export type DecisionPath = (req: Request) => string;
 
@@ -64,8 +88,14 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
           request: opaRequest,
         };
         req.log.trace(decisionLog, `OPA-POLICY-${data.result?.allow ? 'OK' : 'KO'} - Request Access Control`);
+        req.policyEvaluation = {
+          decision: data as PolicyDecision,
+          request: opaRequest,
+          path: policyPath,
+        };
+
         if (process.env.OPA_ADMISSION_CONTROL_DISABLED === 'true' || opa.dryRun.enabled) {
-          onDecision(data.result, (err: unknown): void => {
+          onDecision(req, res, (err: unknown): void => {
             if (process.env.NODE_ENV === 'production')
               req.log.error({ rejected: !!err, decisionLog }, `|||---OPA-POLICY-ADMISSION-CONTROL-DISABLED---|||`);
             res.append(opa.dryRun.header, err ? 'reject' : 'allow');
@@ -73,7 +103,8 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
           });
           return;
         }
-        onDecision(data.result, next);
+
+        onDecision(req, res, next);
       } catch (err) {
         next(err);
       }
@@ -101,7 +132,9 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
   };
 }
 function onDecisionDefault(): OnDecisionHandler {
-  return (decision, next) => {
+  return ({ policyEvaluation }, res, next) => {
+    const { decision } = policyEvaluation;
+
     decision?.allow ? next() : next(new Error(`OPA-POLICY - FORBIDDEN`));
   };
 }

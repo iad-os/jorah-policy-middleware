@@ -46,11 +46,20 @@ export type doPostHandler = (
   }
 ) => Promise<{ data: any }>;
 
+export type loggerHandler = (
+  req: Request,
+  level: 'info' | 'debug' | 'error' | 'trace' | 'warn',
+  msg: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any
+) => void;
+
 export type RequiredHandler = {
   [key: string]: (req: Request) => unknown;
 };
 export type OpaMiddlewareOptions = {
-  doPost?: doPostHandler;
+  doPost: doPostHandler;
+  logger: loggerHandler;
   decisionPath?: DecisionPath;
   onDecision?: OnDecisionHandler;
   required?: RequiredHandler;
@@ -66,17 +75,18 @@ export type PolicyConfiguration = {
 };
 
 export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: OpaMiddlewareOptions) {
-  return function opaMiddleware(options: OpaMiddlewareOptions): RequestHandler {
+  return function opaMiddleware(options: Omit<OpaMiddlewareOptions, 'logger' | 'doPost'>): RequestHandler {
     const {
       required = {},
       toPolicyEvaluationRequest = toPolicyEvaluationRequestDefault,
       decisionPath = decisionPathDefault,
       onDecision = onDecisionDefault,
-      doPost = doPostDefault,
+      doPost,
+      logger,
     } = merge({}, defaults, options);
     return async function (req, res, next) {
       try {
-        const requiredData = await fetchRequiredData(req, required);
+        const requiredData = await fetchRequiredData(req, required, logger);
         const opaRequest = toPolicyEvaluationRequest(req, requiredData);
         const policyPath = `${opa.url}${decisionPath(req)}`;
         const { data } = await doPost(req, policyPath, opaRequest);
@@ -88,7 +98,7 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
           },
           request: opaRequest,
         };
-        req.log.trace(decisionLog, `OPA-POLICY-${data.result?.allow ? 'OK' : 'KO'} - Request Access Control`);
+        logger(req, 'trace', `OPA-POLICY-${data.result?.allow ? 'OK' : 'KO'} - Request Access Control`, decisionLog);
         req.policyEvaluation = {
           decision: data as PolicyDecision,
           request: opaRequest,
@@ -97,8 +107,12 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
 
         if (process.env.OPA_ADMISSION_CONTROL_DISABLED === 'true' || opa.dryRun.enabled) {
           onDecision(req, res, (err: unknown): void => {
-            if (process.env.NODE_ENV === 'production')
-              req.log.error({ rejected: !!err, decisionLog }, `|||---OPA-POLICY-ADMISSION-CONTROL-DISABLED---|||`);
+            if (process.env.NODE_ENV === 'production') {
+              logger(req, 'error', `|||---OPA-POLICY-ADMISSION-CONTROL-DISABLED---|||`, {
+                rejected: !!err,
+                decisionLog,
+              });
+            }
             res.append(opa.dryRun.header, err ? 'reject' : 'allow');
             next();
           });
@@ -113,7 +127,8 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
 
     function fetchRequiredData(
       req: Request,
-      required: { [key: string]: (req: Request) => unknown }
+      required: { [key: string]: (req: Request) => unknown },
+      logger: loggerHandler
     ): { [key: string]: unknown } {
       return reduce(
         required,
@@ -122,7 +137,7 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
             acc[key] = reqFn(req);
             return acc;
           } catch (err) {
-            req.log.error({ req, err }, `KO OPA-MID--FETCH-DATA ${key}`);
+            logger(req, 'error', `KO OPA-MID--FETCH-DATA ${key}`, { req, err });
             acc[key] = undefined;
             return acc;
           }
@@ -142,10 +157,6 @@ function onDecisionDefault(): OnDecisionHandler {
 function decisionPathDefault(): DecisionPath {
   return req => `${req.baseUrl}${reduce(req.params, (acc, param, name) => `${acc}/${name.replace('_id', '')}`, '')}`;
 }
-
-const doPostDefault: doPostHandler = async (req, url, data, options) => {
-  return await axiox.create().post(url, data, options);
-};
 
 const toPolicyEvaluationRequestDefault: ToPolicyEvaluationRequest = (req, required) => ({
   input: {

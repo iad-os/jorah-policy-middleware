@@ -1,6 +1,5 @@
 import { RequestHandler, Request } from 'express';
 import reduce from 'lodash.reduce';
-import '@iad-os/axios-injector';
 import merge from 'lodash.merge';
 import axiox from 'axios';
 import { homedir } from 'os';

@@ -2,6 +2,8 @@ import { RequestHandler, Request } from 'express';
 import reduce from 'lodash.reduce';
 import '@iad-os/axios-injector';
 import merge from 'lodash.merge';
+import axiox from 'axios';
+import { homedir } from 'os';
 
 export type PolicyEvaluation = {
   request: PolicyEvaluationRequest;
@@ -50,7 +52,7 @@ export type RequiredHandler = {
   [key: string]: (req: Request) => unknown;
 };
 export type OpaMiddlewareOptions = {
-  doPost: doPostHandler;
+  doPost?: doPostHandler;
   decisionPath?: DecisionPath;
   onDecision?: OnDecisionHandler;
   required?: RequiredHandler;
@@ -72,13 +74,14 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
       toPolicyEvaluationRequest = toPolicyEvaluationRequestDefault,
       decisionPath = decisionPathDefault,
       onDecision = onDecisionDefault,
+      doPost = doPostDefault,
     } = merge({}, defaults, options);
     return async function (req, res, next) {
       try {
         const requiredData = await fetchRequiredData(req, required);
         const opaRequest = toPolicyEvaluationRequest(req, requiredData);
         const policyPath = `${opa.url}${decisionPath(req)}`;
-        const { data } = await options.doPost(req, policyPath, { input: opaRequest });
+        const { data } = await doPost(req, policyPath, { input: opaRequest });
         const decisionLog = {
           allow: data.result?.allow,
           decision: {
@@ -134,7 +137,6 @@ export default function opaMiddlewareConfig(opa: PolicyConfiguration, defaults: 
 function onDecisionDefault(): OnDecisionHandler {
   return ({ policyEvaluation }, res, next) => {
     const { decision } = policyEvaluation;
-
     decision?.allow ? next() : next(new Error(`OPA-POLICY - FORBIDDEN`));
   };
 }
@@ -142,6 +144,10 @@ function onDecisionDefault(): OnDecisionHandler {
 function decisionPathDefault(): DecisionPath {
   return req => `${req.baseUrl}${reduce(req.params, (acc, param, name) => `${acc}/${name.replace('_id', '')}`, '')}`;
 }
+
+const doPostDefault: doPostHandler = async (req, url, data, options) => {
+  return await axiox.create().post(url, data, options);
+};
 
 const toPolicyEvaluationRequestDefault: ToPolicyEvaluationRequest = (req, required) => ({
   input: {

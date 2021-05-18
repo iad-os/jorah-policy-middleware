@@ -1,8 +1,8 @@
-import { RequestHandler, Request } from 'express';
-import reduce from 'lodash.reduce';
-import merge from 'lodash.merge';
+import '@iad-os/axios-injector';
 import axiox from 'axios';
-import { homedir } from 'os';
+import { Request, RequestHandler } from 'express';
+import merge from 'lodash.merge';
+import reduce from 'lodash.reduce';
 
 export type PolicyEvaluation = {
   request: PolicyEvaluationRequest;

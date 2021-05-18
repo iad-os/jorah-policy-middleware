@@ -26,6 +26,9 @@
     "type": "git",
     "url": "https://github.com/iad-os/jorah-policy-middleware.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "private": false,
   "license": "MIT",
   "engines": {

@@ -1,4 +1,3 @@
-import '@iad-os/axios-injector';
 import axiox from 'axios';
 import { Request, RequestHandler } from 'express';
 import merge from 'lodash.merge';

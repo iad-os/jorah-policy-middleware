@@ -1,6 +1,6 @@
 {
   "name": "@iad-os/jorah-policy-middleware",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Open Policy Agent Middleware",
   "maintainers": [
     {

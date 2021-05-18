@@ -52,7 +52,7 @@ export default jorah(config, default);
 
 ## Usage
 
-On express router:
+On express router middleware:
 
 ```typescript
 import express from 'express';
@@ -74,10 +74,6 @@ router.route('/').all(
     })
     // other middleware ...
 );
-
-export default router;
-
-};
 ```
 
 As express middleware:
